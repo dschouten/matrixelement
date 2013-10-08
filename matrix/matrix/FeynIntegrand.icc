@@ -1,0 +1,457 @@
+//
+// authors: Doug Schouten (doug dot schouten at triumf dot ca)
+//
+//
+
+using std::string;
+using std::vector;
+
+namespace
+{
+  double tparams[MAX_DIMENSIONS];
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+FeynIntegrand<FEYNMANDIAGRAM>::FeynIntegrand( const string& name, 
+					      Integrator* integrator, 
+					      unsigned nVars,
+					      unsigned nLoop ) :
+  m_integrator( integrator ),
+  m_name( name ),
+  m_pdfset( "cteq6l" ), 
+  m_maxattempts( nLoop ),
+  m_nattempts( 0 ),
+  m_nvars( nVars ),
+  m_volume( 1. ),
+  m_nbounds( nVars ),
+  m_reset( 1 ),
+  m_ncalls( 0 ),
+  m_ihel( -1 ),
+  m_bounds( nVars, bounds_t(0,0) ),
+  m_nointegration( false ),
+  m_pdfonly( false ),
+  m_nopdf( false ),
+  m_integrand_factors( 50, 0 )
+{  
+  SHOW_DEBUG( std::cout << "Create matrix element [" << name << "]: " << std::endl );
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+bool FeynIntegrand<FEYNMANDIAGRAM>::initialize()
+{
+  glbl_integrand = this;
+  
+  m_integrator->setNDimensions( dimension() );
+  m_integrator->setIntegrand( fcn_wrapper );
+  
+  if( !m_nointegration )
+  {
+    double xl, xh;
+    for( unsigned int i = 0; i < dimension(); ++i )
+    {
+      limits( i, xl, xh );
+      if( xh == 0 || fabs( xl - xh ) < EPSILON )
+      {
+	std::cout << "WARNING integration limits are not set for variable " << i << std::endl;
+      }
+      else
+      {
+	SHOW_DEBUG( std::cout << "\tlimits for variable [" << i << "]: " 
+		    << xl << " " << xh << std::endl );
+      }
+    }
+  }
+
+  m_pdfgrid = PDFGrid::Load( m_pdfset );
+
+  setDoClearHelicityCombinations( true );
+
+  return true;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+bool FeynIntegrand<FEYNMANDIAGRAM>::increment()
+{
+  ++m_nattempts;
+  return true;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+bool FeynIntegrand<FEYNMANDIAGRAM>::finalize()
+{
+  glbl_integrand = 0x0;
+  return true;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+void FeynIntegrand<FEYNMANDIAGRAM>::setIntegrationLimits( unsigned param, double lower, double upper )
+{   
+  if( param >= m_bounds.size() || param < 0 )
+    throw std::runtime_error( "parameter index out of range in FeynIntegrand::setBounds()" );
+  
+  if( m_bounds[param].second ) // correct volume if a value exists already
+  {
+    m_volume /= m_bounds[param].second;
+  }
+  
+  m_bounds[param] = std::make_pair(lower, upper - lower);
+  m_volume *= upper - lower;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+double FeynIntegrand<FEYNMANDIAGRAM>::operator()( const double parameters[] )
+{
+  m_ncalls += 1;
+  
+  STRT_TIMER(tPrelim);
+  STRT_TIMER(tTotal);
+  
+  m_integrand_factors[IVOL] = m_volume;
+  
+  partons = measured;
+  
+  STOP_TIMER(tPrelim);
+  STRT_TIMER(tSetKine);
+  
+  for( unsigned int i = 0; i < dimension(); ++i )
+  {
+    tparams[i] = parameters[i];
+  }
+  
+  if( !m_nointegration ) // only transform if parameters provided by integrator
+  {
+    transformParameters( tparams ); // transform parameters from [0,1] to [lower,upper]
+  }
+  
+  if( !setKinematics( tparams ) )
+  {
+    std::cout << "ERROR setKinematics() failed" << std::endl;
+    STOP_TIMER(tSetKine);
+    STOP_TIMER(tTotal);
+    return 0; // &m_integrand_factors;
+  }
+  
+  STOP_TIMER(tSetKine);
+  
+  STRT_TIMER(tQuarks);
+  
+  TLorentzVector total;
+  partons.total( total );
+  
+  if( !isPossible( total ) && !m_nointegration )
+  {
+    SHOW_DEBUG( std::cout << "Total E, PZ: " << total.E() << ", " << total.Pz() << std::endl );
+    STOP_TIMER(tQuarks);
+    return 0; // &m_integrand_factors;
+  }
+  
+  double ea(0.), eb(0.);
+  if( !getPartonEnergies( ea, eb, total ) )
+  {
+    SHOW_DEBUG( std::cout << "EA, EB: " << ea << ", " << eb << std::endl );
+    STOP_TIMER(tQuarks);
+    return 0; // &m_integrand_factors;
+  }
+  partons.pa.SetPxPyPzE(0, 0,  ea, ea);
+  partons.pb.SetPxPyPzE(0, 0, -eb, eb);
+  
+  STOP_TIMER(tQuarks);
+  
+  STRT_TIMER(tME);
+  
+  double me = matrixElement();
+  
+  m_integrand_factors[ITOT] = me;
+  
+  STOP_TIMER(tME);
+  
+  STRT_TIMER(tPhase);
+  
+  #ifndef MEONLY // ---------------- !MEONLY -------------------------
+
+  // 
+  // here the TF, PDF and LIPs factors are determined
+  // 
+  // Note: for ME integrands with complicated variable transformations
+  //       this rather straightforward method is cumbersome, so the LIPs
+  //       factor should probably be handled internally. In this case, 
+  //       phaseSpace() should return 1.0
+  //       
+  
+  m_integrand_factors[IPS] = phaseSpace();
+  
+  STOP_TIMER(tPhase);
+  
+  STRT_TIMER(tTF);
+  
+  m_integrand_factors[ITF] = totalTF();
+  
+  STOP_TIMER(tTF);
+  
+  m_integrand_factors[ITOT] *= ( m_integrand_factors[IPS]  *  // phase space factor
+				 m_integrand_factors[ITF]  *  // total transfer function
+				 m_integrand_factors[IVOL] ); // volume element
+
+  SHOW_DEBUG( std::cout << "Matrix element: " << m_integrand_factors[IME] 
+	      << " phase space: " << m_integrand_factors[IPS]
+	      << " TF: " << m_integrand_factors[ITF] 
+	      << " volume: " << m_integrand_factors[IVOL] 
+	      << std::endl ); 
+  SHOW_DEBUG( std::cout << "total: " << m_integrand_factors[ITOT] << std::endl );
+
+#endif // ---------------- !MEONLY -------------------------
+  
+  if( std::isnan( m_integrand_factors[ITOT] ) ) // check for nan ...
+  {
+    m_integrand_factors[ITOT] = 0;
+  }
+
+  STOP_TIMER(tTotal);
+  
+#ifdef BENCHMARK
+  if (m_ncalls % 100000 == 0 && m_ncalls > 100000)
+  {
+    std::cout << "Prelim: " << tPrelim.CpuTime()
+	      << "\nSetKine: " << tSetKine.CpuTime()
+	      << "\nQuarks: " << tQuarks.CpuTime()
+	      << "\nME: " << tME.CpuTime()
+	      << "\nPhaseSpace: " << tPhase.CpuTime()
+	      << "\nPDF: " << tPDF.CpuTime()
+	      << "\nTF: " << tTF.CpuTime()
+	      << "\nTotal: " << tTotal.CpuTime() << std::endl;
+  }
+#endif
+  
+  return (m_integrand_factors[ITOT]); // &m_integrand_factors;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+bool FeynIntegrand<FEYNMANDIAGRAM>::isPossible( const TLorentzVector& total ) const
+{
+  return ( (total.M() <= 2 * hepstd::beamEnergy) && (std::abs(total.Pz()) < hepstd::beamEnergy) && (total.E() <= 2 * hepstd::beamEnergy) );
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+bool FeynIntegrand<FEYNMANDIAGRAM>::getPartonEnergies(double& ea, 
+						      double& eb, 
+						      const TLorentzVector& total ) const
+{
+  using hepstd::beamEnergy;
+  
+  double partial = std::sqrt( (total.Pz()*total.Pz()) + (total.M()*total.M()) );
+  ea = (partial + total.Pz()) / 2;
+  eb = (partial - total.Pz()) / 2;
+  
+  if (ea < 0)
+    return false;
+  if (ea > beamEnergy)
+    return false;
+  if (eb < 0)
+    return false;
+  if (eb > beamEnergy)
+    return false;
+  
+  return true;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+double FeynIntegrand<FEYNMANDIAGRAM>::PDF( int ida, int idb ) const 
+{
+#ifdef MEONLY
+  return 1.0;
+#endif
+
+  double sa, sb;
+  double ea, eb;
+  double pdfa, pdfb;
+    
+  eventScale(sa, sb);
+  
+  ea = partons.pa.E(); 
+  eb = partons.pb.E();
+
+  if( m_nopdf )
+  {
+    return 1.0 / (ea * eb);
+  }
+    
+  double xa = ea / hepstd::beamEnergy;
+  double xb = eb / hepstd::beamEnergy;
+  
+  // #ifndef USECTEQ
+  //   static double Qmin = LHAPDF::getQ2min(0);
+  //   static double Qmax = LHAPDF::getQ2max(0);
+  // #else
+  //   static double Qmin = 1.3e00;
+  //   static double Qmax = 1.0e04;
+  // #endif
+  
+  //   if (sa < Qmin || sb < Qmin )
+  //     return 0;
+  //   if (sa > Qmax || sb > Qmax )
+  //     return 0;
+
+  if( sa < m_pdfgrid->get_Qmin() || sb < m_pdfgrid->get_Qmin() )
+    return 0;
+  if( sa > m_pdfgrid->get_Qmax() || sb > m_pdfgrid->get_Qmax() )
+    return 0;
+
+  if( xa > 1 || xb > 1 )
+    return 0;
+
+  if( xa < TINY/100 || xb < TINY/100 )
+    return 0;
+
+  if (ea && eb)
+  {
+    STRT_TIMER(tPDF);
+    
+    // #ifndef USECTEQ
+    //     pdfa = LHAPDF::xfx(xa, sa, ida) / (xa * ea);
+    //     pdfb = LHAPDF::xfx(xb, sb, idb) / (xb * eb);
+    // #else
+    //     pdfa = ctq6pdf_(ida, xa, sa) / ea;
+    //     pdfb = ctq6pdf_(idb, xb, sb) / eb;
+    // #endif
+
+    pdfa = (*m_pdfgrid)( ida, xa, sa ) / ea;
+    pdfb = (*m_pdfgrid)( idb, xb, sb ) / eb;
+    
+    SHOW_DEBUG( std::cout 
+		<< "id, x, Q, PDF: " << ida << ", " << xa << ", " << sa << ", " << pdfa << std::endl
+		<< "id, x, Q, PDF: " << idb << ", " << xb << ", " << sb << ", " << pdfb << std::endl );
+    
+    STOP_TIMER(tPDF);
+    
+    return pdfa * pdfb;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+void FeynIntegrand<FEYNMANDIAGRAM>::transformParameters( double par[] ) const
+{
+  for( unsigned i = 0; i < dimension(); ++i )
+  {
+    par[i] = m_bounds[i].first + m_bounds[i].second * par[i];
+  }
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+#ifndef __CINT__
+#include "matrix/Fortran.hh"
+#endif
+
+template<typename FEYNMANDIAGRAM>
+void FeynIntegrand<FEYNMANDIAGRAM>::calculateDiagram( void* (*diagram)(double[][4], double*, int*), 
+						      double array[][4],
+						      double& result, 
+						      unsigned& idiagram ) const
+{
+  // unsigned icount = 0;
+  unsigned index;
+
+  static double empty[NCOMBSTORED];
+  static bool init = false;
+
+  if( !init )
+  {
+    for( index=0; index < NCOMBSTORED; ++index ) 
+      empty[index]=0;
+    init = true;
+  }
+  
+  if( m_pdfonly )
+  {
+    return;
+  }
+
+  if( m_ihel >= 1 )
+  {
+    C_tomecomb.iselectedhel = m_ihel;
+    std::copy( empty, empty + NCOMBSTORED, C_tomecomb.mecomb );
+    // for( index=0; index < NCOMBSTORED; ++index )
+    // {
+    //   C_tomecomb.mecomb[index] = 0.; // reset ME per helicity combination to 0
+    // }
+  }
+  
+  (*diagram)( array, &result, &m_reset );             // evaluate the Feynman diagram
+  SHOW_DEBUG( std::cout << "diagram #" << idiagram << ": " << result << std::endl );
+
+  if( m_ihel >= 1 )
+  {
+    // for( index=0; index < NCOMBSTORED; ++index )
+    // {
+    //   if( C_tomecomb.mecomb[index] > 0. )
+    //   {
+    // 	if( icount++ == (unsigned)m_ihel )
+    // 	{
+    // 	  m_integrand_factors[IME] += C_tomecomb.mecomb[index]; // select only a particular helicity combination
+    // 	  result = C_tomecomb.mecomb[index];
+    // 	  SHOW_DEBUG( std::cout << "diagram #" << idiagram 
+    // 		                << ", good helicity combination #" << m_ihel << ": " << C_tomecomb.mecomb[index] << std::endl );
+    // 	  break;
+    // 	}
+    //   }
+    // }
+    m_integrand_factors[IME] += C_tomecomb.mecomb[m_ihel-1];
+    result = C_tomecomb.mecomb[m_ihel-1];
+    SHOW_DEBUG( std::cout << "diagram #" << idiagram 
+		          << ", good helicity combination #" << m_ihel << ": " << C_tomecomb.mecomb[m_ihel-1] << std::endl );
+  }
+  else
+  {
+    m_integrand_factors[IME] += result;      // accumulate the sum of diagrams
+  }
+  idiagram += 1;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+void FeynIntegrand<FEYNMANDIAGRAM>::setNumIntegrationDimensions( unsigned int ndim )
+{
+  m_nvars   = ndim;
+  m_nbounds = ndim;
+  m_bounds  = std::vector<bounds_t>( ndim, bounds_t(0,0) );
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+FeynIntegrand<FEYNMANDIAGRAM>* FeynIntegrand<FEYNMANDIAGRAM>::glbl_integrand = 0x0;
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+template<typename FEYNMANDIAGRAM>
+FEYNMANDIAGRAM FeynIntegrand<FEYNMANDIAGRAM>::partons;
+
+template<typename FEYNMANDIAGRAM>
+FEYNMANDIAGRAM FeynIntegrand<FEYNMANDIAGRAM>::measured;
+
+// ------------------------- ======= ------------------------- ======= -------------------------

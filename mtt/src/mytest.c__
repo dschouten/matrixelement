@@ -1,0 +1,30 @@
+#include <iostream>
+#include "reconstruction.h"
+
+using namespace std;
+
+//tbW+l+
+//tbar,bbar,W-,l-
+
+int main()
+{
+	cout << "Welcome to Mtt reconstruction!" << endl;
+	event myevent;
+	myevent.setmasses( 172.5,  172.5, 80.399, 80.399,0.,0.); //t,tbar,W+,W-
+	              //E,px,py,pz
+        double p3a[4] =   { 91.7784765625, 73.6814128727, 32.5986192086, -45.1964149921 };//positron type
+	double p4a[4] = { 29.2984882812, -8.29729060996, 20.3783149022, 19.346045501 };//electron type
+	double p5a[4] =  { 58.69846875, -1.47276460069, 53.5976795576, 22.281937163 };//b
+	double p6a[4] =  { 125.517039063, -74.0139893889, -37.6642885639, 93.4569351883 };//bbar
+
+	double p7a[4] = {0, 50.4516906738, -81.215866088,0};//MET
+
+	myevent.setmomenta(p3a,p4a,p5a,p6a,p7a);
+	//myevent.setkf(3,4,5,6);
+	myevent.solve();
+	//myevent.solve_allcombi();
+	//myevent.printcpl();
+	myevent.printl();
+	
+	return 0;
+}

@@ -1,0 +1,125 @@
+#include <iostream>
+
+namespace DHELAS
+{
+  template<unsigned HELICITY>
+  SimpleArray<HelArray, HELICITY>
+  inputFunction(TLorentzVector input, double mass, int direction,
+		int(*function)(double*, double*, int*, int*, doublecomplex*),
+		bool rh)
+  {
+    std::cout << "If you are reading this, something is very wrong!"
+	      << std::endl;
+
+    SimpleArray<HelArray, HELICITY> output;
+
+    return output;
+  }
+
+  template<>
+  SimpleArray<HelArray, 1>
+  inputFunction<1>(TLorentzVector input, double mass, int direction,
+		   int(*function)(double*, double*, int*, int*,
+				  doublecomplex*),
+		   bool rh)
+  {
+    double array[4];
+    hepstd::tlvToArray(input, array);
+
+    SimpleArray<HelArray, 1> output;
+
+    int helicity = rh ? direction : -direction;
+    function(array, &mass, &helicity, &direction, &output[0].p1);
+
+    return output;
+  }
+
+  template<>
+  SimpleArray<HelArray, 2>
+  inputFunction<2>(TLorentzVector input, double mass, int direction,
+		   int(*function)(double*, double*, int*, int*,
+				  doublecomplex*),
+		   bool)
+  {
+    double array[4];
+    hepstd::tlvToArray(input, array);
+
+    SimpleArray<HelArray, 2> output;
+
+    int temp2[2] = {-1, 1};
+    function(array, &mass, &temp2[0], &direction, &output[0].p1);
+    function(array, &mass, &temp2[1], &direction, &output[1].p1);
+
+    return output;
+  }
+
+  template<>
+  SimpleArray<HelArray, 3>
+  inputFunction<3>(TLorentzVector input, double mass, int direction,
+		   int(*function)(double*, double*, int*, int*,
+				  doublecomplex*),
+		   bool)
+  {
+    double array[4];
+    hepstd::tlvToArray(input, array);
+
+    SimpleArray<HelArray, 3> output;
+
+    int temp2[3] = {-1, 0, 1};
+    function(array, &mass, &temp2[0], &direction, &output[0].p1);
+    function(array, &mass, &temp2[1], &direction, &output[1].p1);
+    function(array, &mass, &temp2[2], &direction, &output[2].p1);
+
+    return output;
+  }
+
+
+  template<unsigned SIZE1, unsigned SIZE2>
+  SimpleArray<HelArray, SIZE1 * SIZE2>
+  middleFunction(SimpleArray<HelArray, SIZE1>& input1,
+		 SimpleArray<HelArray, SIZE2>& input2,
+		 doublecomplex factor[2], double mass, double width,
+		 int(*function)(doublecomplex*, doublecomplex*,
+				doublecomplex*, double*, double*,
+				doublecomplex*))
+  {
+    SimpleArray<HelArray, SIZE1 * SIZE2> output;
+
+    for (unsigned i1 = 0; i1 < SIZE1; ++i1)
+      for (unsigned i2 = 0; i2 < SIZE2; ++i2)
+      {
+	unsigned index = i1 * SIZE2 + i2;
+	function(&input1[i1].p1, &input2[i2].p1, factor, &mass, &width,
+		 &output[index].p1);
+      }      
+
+    return output;
+  }
+
+
+  template<unsigned SIZE1, unsigned SIZE2, unsigned SIZE3>
+  SimpleArray<doublecomplex, SIZE1 * SIZE2 * SIZE3>
+  outputFunction(SimpleArray<HelArray, SIZE1>& input1,
+		 SimpleArray<HelArray, SIZE2>& input2,
+		 SimpleArray<HelArray, SIZE3>& input3,
+		 doublecomplex factor[2],
+		 int(*function)(doublecomplex*, doublecomplex*,
+				doublecomplex*, doublecomplex*,
+				doublecomplex*))
+  {
+    SimpleArray<doublecomplex, SIZE1 * SIZE2 * SIZE3> output;
+
+    for (unsigned i1 = 0; i1 < SIZE1; ++i1)
+      for (unsigned i2 = 0; i2 < SIZE2; ++i2)
+	for (unsigned i3 = 0; i3 < SIZE3; ++i3)
+	{
+	  unsigned index = i1 * SIZE2 * SIZE3
+	    + i2 * SIZE3 + i3;
+	  function(&input1[i1].p1, &input2[i2].p1, &input3[i3].p1, factor,
+		   &output[index]);
+	}
+
+    return output;
+  }
+
+}

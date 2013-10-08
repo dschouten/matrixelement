@@ -1,0 +1,22 @@
+#ifndef CUBATUREINTEGRATOR_HH
+#define CUBATUREINTEGRATOR_HH
+
+#include "integrator/Integrator.hh"
+
+///////////////////////////////////////////////////////////////////
+// Cubature from http://ab-initio.mit.edu/wiki/index.php/Cubature
+///////////////////////////////////////////////////////////////////
+
+class CubatureIntegrator : public Integrator
+{
+public:
+  CubatureIntegrator();
+  virtual ~CubatureIntegrator() {}
+  
+  virtual void doIntegral( double returnVal[], double error[], int* fail,
+			   int* neval, double prob[] ) const;
+  
+  static void evaluateIntegrand( unsigned, const double*, void*, unsigned, double* );
+};
+
+#endif

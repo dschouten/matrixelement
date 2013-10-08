@@ -1,0 +1,14 @@
+Author: Lars Sonnenschein
+
+The code is based on the following two publications:
+"Analytical solution of ttbar dilepton equations" published in Phys. Rev. D 73 054015 (2006)
+(latest updated version	available at arXiv:hep-ph/0603011v3 including massive anti-/neutrinos)
+
+Irreducible Singularities are circumvented exploiting Ansatz made in 
+"Algebraic Approach to solve ttbar dilepton equations" Phys. Rev. D 72 095020 (2005)
+(latest updated version available at arXiv:hep-ph/0510100v2 including massive anti-/neutrinos)
+
+The case of massive neutrinos and anti-neutrinos is interesting for BSM channels with same topology.
+
+The src/main.cc program shows an example, how to make use of the analytical solution.
+Compilation via gmake main.x

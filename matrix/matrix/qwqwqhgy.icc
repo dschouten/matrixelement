@@ -1,0 +1,460 @@
+//
+// author Doug Schouten <doug dot schouten at triumf dot ca>
+//
+// solutions transposed from Madgraph v5
+
+
+template<typename TKIN>
+int qwqwqhgy( const TKIN& inputs, double Qx, double Qy,
+	      double qh_sqr, double qwp_sqr, double qwm_sqr, double y, 
+	      std::vector<TKIN>& sol, TLorentzVector isr = TLorentzVector() ) 
+{
+  using std::pow;
+  using std::sqrt;
+  
+  const double RESOL = 1.0e0;
+  
+  /* This function gets the two missing momenta for 
+   the following topology:
+  
+                             ________ missing    p1
+                            O________ visible    p3
+                       r1  /
+                          /
+       ------------------O 
+              r3          \ 
+                       r2  \ ________ missing    p2
+                            O________ visible    p4
+  
+  
+   Following the solution in Madweight
+  */
+  
+  std::vector<double> p2y_array;
+  std::vector<double> E2_array;
+  
+  // basic variables
+  
+  double p1x, p1y, p1z, E1;
+  double p2x, p2y, p2z, E2;
+  
+  double m1_sqr = 0;
+  double m2_sqr = 0;
+  
+  double s13_sqr = qwm_sqr;
+  double s24_sqr = qwp_sqr;
+  double s_sqr   = qh_sqr;  
+
+  // with pa = Ea, pb = Eb, have
+  // (1) pa - pb = sinh(y) sqrt(s)
+  // (2) pa + pb = cosh(y) sqrt(s)
+  //
+  // which yields
+  //
+  // => 2 pa = [sinh(y) + cosh(y)] sqrt(s) = exp(y) sqrt(s)
+  // => 2 pb = [cosh(y) - sinh(y)] sqrt(s) = exp(-y) sqrt(s)
+  
+  double ea = std::sqrt(s_sqr)*exp( y) / 2;
+  double eb = std::sqrt(s_sqr)*exp(-y) / 2;
+  
+  TLorentzVector pa(0,0, ea,ea);
+  TLorentzVector pb(0,0,-eb,eb);
+
+  // std::cout << "system: " << (pa + pb).M() << ", " << (pa + pb).Px() << ", " << (pa + pb).Py()
+  // 	    << ", " << (pa + pb).Rapidity() << ", " << (pa + pb).E() << std::endl;
+  
+  TLorentzVector boost;
+
+  if( isr.Pt() > TINY )
+  {
+    boost.SetPxPyPzE( isr.Px(), isr.Py(), 0, std::sqrt( pow(isr.Pt(),2) + pow((pa + pb).Pz(),2) + pow((pa + pb).M(),2) ) );
+    
+    double boostarry[3] = { boost.BoostVector().X(),
+			    boost.BoostVector().Y(), 0 };
+    
+    pa.Boost( boostarry );
+    pb.Boost( boostarry );
+  }
+
+  double xa = pa.E() / hepstd::beamEnergy;
+  double xb = pb.E() / hepstd::beamEnergy;
+
+  // std::cout << "system: " << (pa + pb).M() << ", " << (pa + pb).Px() << ", " << (pa + pb).Py()
+  // 	    << ", " << (pa + pb).Rapidity() << ", " << (pa + pb).E() << std::endl;
+  
+  TLorentzVector lm = inputs.lm;
+  TLorentzVector lp = inputs.lp;
+
+  double p3x = lm.Px();
+  double p3y = lm.Py();
+  double p3z = lm.Pz();
+  double E3 = lm.E();
+  double m3_sqr = pow(lm.M(),2);
+  
+  double p4x = lp.Px();
+  double p4y = lp.Py();
+  double p4z = lp.Pz();
+  double E4 = lp.E();
+  double m4_sqr = pow(lp.M(),2);  
+  
+  double px_miss = -(p4x+p3x+isr.Px());
+  double py_miss = -(p4y+p3y+isr.Py());
+  
+  // std::cout << "p3x= "<<Form("%0.8f",p3x) << std::endl;
+  // std::cout << "p3y= "<<Form("%0.8f",p3y) << std::endl;
+  // std::cout << "p3z= "<<Form("%0.8f",p3z) << std::endl;
+  // std::cout << "E3 = "<<Form("%0.8f",E3) << std::endl;
+  
+  // std::cout << "p4x= "<<Form("%0.8f",p4x) << std::endl;
+  // std::cout << "p4y= "<<Form("%0.8f",p4y) << std::endl;
+  // std::cout << "p4z= "<<Form("%0.8f",p4z) << std::endl;
+  // std::cout << "E4 = "<<Form("%0.8f",E4) << std::endl;
+
+  // total measured E and pZ
+  
+  double e_out  =  E3 +  E4;
+  double pz_out = p3z + p4z;
+  
+  //     start from the following expressions for p1z and p2x:
+  //
+  //     p1z=A1 + A2 E2 + A3 p2y + A4 p2x
+  //     p2x=B1 + B2 E2 + B3 p2y + A4 p1z
+  
+  if( fabs(p3z) < TINY ) 
+  {
+    p3z = p3z < 0 ? p3z - TINY : p3z + TINY;
+  }
+  if( fabs(p4x) < TINY ) 
+  {
+    p4x = p4x < 0 ? p4x - TINY : p4x + TINY;
+  }
+  
+  double A1=(m1_sqr + m3_sqr + 2.0*E3*(pa.E() + pb.E() - e_out) - 2.0*p3x*px_miss - 2.0*p3y*py_miss - s13_sqr)/(2.0*p3z);
+  double A2=-E3/p3z;
+  double A3=p3y/p3z;
+  double A4=p3x/p3z;
+  
+  double B1=(m2_sqr + m4_sqr - 2.0*p4z*(pa.Pz() + pb.Pz() - pz_out) - s24_sqr)/(2.0*p4x);
+  double B2=E4/p4x;
+  double B3=-p4y/p4x;
+  double B4=p4z/p4x;
+  
+  if( fabs(1 - A4*B4) < TINY )
+  {
+    // std::cout << "1 - A4 B4 = 0" << std::endl;
+    return 0;
+  }
+  
+  double p2x_ti=(B1+B4*A1)/(1.0-A4*B4);
+  double p2x_E2=(B2+B4*A2)/(1.0-A4*B4);
+  double p2x_p2y=(B3+B4*A3)/(1.0-A4*B4);
+  
+  double p1x_ti=px_miss-p2x_ti;
+  double p1x_E2=-p2x_E2;
+  double p1x_p2y=-p2x_p2y;
+  
+  double p1y_ti=py_miss;
+  double p1y_p2y=-1.0;
+  double p1y_E2=0.0;
+  
+  double p1z_ti=(A1+A4*B1)/(1.0-A4*B4);
+  double p1z_E2=(A2+A4*B2)/(1.0-A4*B4);
+  double p1z_p2y=(A3+A4*B3)/(1.0-A4*B4);
+  
+  double E1_ti=pa.E()+pb.E()-e_out;
+  double E1_E2=-1.0;
+  double E1_p2y=0.0;
+  
+  double p2z_ti=pa.Pz()+pb.Pz()-p1z_ti-pz_out;
+  double p2z_E2=-p1z_E2;
+  double p2z_p2y=-p1z_p2y;
+  
+  //
+  //     mass shell conditions:     
+  //    
+  //     E1^2-p1x^2-p1y^2-p1z^2=m1^2   (1)
+  //     E2^2-p2x^2-p2y^2-p2z^2=m2^2   (2) 
+  //
+  //     equivalent to
+  //
+  //     g11*E2^2 + g22*p2y^2 + g12*E2*p2y + g10*E2 + g20*p2y + g00 = 0  (1)
+  //     h11*E2^2 + h22*p2y^2 + h12*E2*p2y + h10*E2 + h20*p2y + h00 = 0  (2)
+  //
+  double g11=pow(E1_E2,2)-pow(p1x_E2,2)-pow(p1y_E2,2)-pow(p1z_E2,2);
+  //
+  double g22=pow(E1_p2y,2)-pow(p1x_p2y,2)-pow(p1y_p2y,2)-pow(p1z_p2y,2);
+  //
+  double g12=2.0*(E1_E2*E1_p2y-p1x_E2*p1x_p2y-p1y_E2*p1y_p2y-p1z_E2*p1z_p2y);
+  //
+  double g10=2.0*(E1_E2*E1_ti-p1x_E2*p1x_ti-p1y_E2*p1y_ti-p1z_E2*p1z_ti);
+  // 
+  double g20=2.0*(E1_ti*E1_p2y-p1x_ti*p1x_p2y-p1y_ti*p1y_p2y-p1z_ti*p1z_p2y);
+  //
+  double g00=pow(E1_ti,2)-pow(p1x_ti,2)-pow(p1y_ti,2)-pow(p1z_ti,2)-m1_sqr;
+  
+  //
+  //double h11=1.0-pow(p2x_E2,2)-pow(p2z_E2,2);
+  //
+  //double h22=-1.0-pow(p2x_p2y,2)-pow(p2z_p2y,2);
+  //
+  //double h12=-2.0*(p2x_p2y*p2x_E2+p2z_p2y*p2z_E2);
+  //
+  double h10=-2.0*(p2x_ti*p2x_E2+p2z_ti*p2z_E2);
+  //
+  double h20=-2.0*(p2x_p2y*p2x_ti+p2z_p2y*p2z_ti);
+  //
+  double h00=-pow(p2x_ti,2)-pow(p2z_ti,2)-m2_sqr;
+  
+  // std::cout << h11 << ":" << g11 << std::endl;
+  // std::cout << h22 << ":" << g22 << std::endl;
+  // std::cout << h12 << ":" << g12 << std::endl;
+  
+  double alpha = -(g00-h00)/(g20-h20); 
+  double beta  = -(g10-h10)/(g20-h20);
+  
+  bool solved_E2  = false;
+  bool solved_p2y = false;
+  
+  std::vector< std::pair<double, double> > E2_p2y_pairs;
+  
+  //     note that the two quartic equations are fake:
+  //
+  //     h11=g11
+  //     h22=g22
+  //     h12=g12
+  //
+  //     We are left with the equation
+  //
+  //     (g10-h10) E2 + (g20-h20) p2y + g00-h00 = 0
+  //
+  //      <=>   p2y = alpha + beta E2
+  
+  if( fabs(g20-h20) < TINY ) // case #1: coefficient of p2y is ~ 0, then E2 = (h00-g00) / (g10-h10)
+  {
+    // // std::cout << "case #1" << std::endl;
+    if( fabs(g10-h10) > TINY )
+    {
+      E2_array.push_back( -(g00-h00) / (g10-h10) );
+      solved_E2 = true;
+      if( E2_array.back() > 0 ) // use the quartic equation (1) to solve for p2y
+      {       
+	double dem = g22;
+	double b = (g12*E2_array.back()+g20)/dem;
+	double c = (g11*pow(E2_array.back(),2)+g10*E2_array.back()+g00)/dem;
+	double rho = pow(b,2)-4.0*c;
+	if( rho == 0.0 )  // maximum one solution for p2y
+	{  
+	  p2y_array.push_back( -b/2.0 );
+	  solved_p2y = true;
+	  // goto L_SOLVED_P2Y;
+	}
+	if( rho > 0.0 ) // two solutions for p2y
+	{
+	  p2y_array.push_back( (-b+std::sqrt(rho))/2.0 );
+	  p2y_array.push_back( (-b-std::sqrt(rho))/2.0 );
+	  solved_p2y = true;	  
+	  // goto L_SOLVED_P2Y; 
+	}
+	if( rho < 0.0 )
+	{
+	  // std::cout << "rho < 0" << std::endl;
+	  return 0;
+	}
+      }
+      if( !solved_E2 || !solved_p2y )
+	// std::cout << "no valid solutions" << std::endl;
+	return 0; // no valid solutions for E2, p2y 
+    }
+    else
+    {
+      // std::cout << "g10-h10 = 0" << std::endl;
+      return 0;
+    }
+  }
+  else  // case #2: coefficient of p2y is != 0, then p2y = alpha + beta E2
+  {
+    // std::cout << "case #2" << std::endl;
+    
+    // solve: g11*E2^2 + g22*p2y^2 + g12*E2*p2y + g10*E2 + g20*p2y + g00 = 0  (1)
+    // 
+    // using p2y = alpha + beta E2 ... i.e., a quadratic equation
+    //
+    // then g11*E2^2 + g22*(alpha + beta E2)^2 + g12*E2*(alpha + beta E2) + g10*E2 + g20*(alpha + beta E2) + g00 = 0
+    // => (g11 + g22*beta^2 + g12*beta)*E2^2 + (2*g22*alpha*beta + g12*alpha + g10 + g20*beta)*E2 + g22*alpha^2 + g20*alpha + g00 = 0
+    
+    double dem = g11+g22*pow(beta,2)+g12*beta;
+    
+    if( fabs(dem) < TINY ) // exactly one solution
+    {
+      double c0 = 2.0*g22*alpha*beta+g12*alpha+g10+g20*beta;
+      double c1 = g22*pow(alpha,2)+g20*alpha+g00;
+      if( fabs(c0) > TINY )
+      {
+	E2_array.push_back( -c1/c0 );
+	solved_E2 = true;
+      }
+      else
+      {
+	// std::cout << "c0 = 0" << std::endl;
+	return 0;
+      }
+      if( E2_array.back() <= 0.0 ) 
+      {
+	// std::cout << "E2 < 0" << std::endl;
+	return 0;
+      }
+    }    
+    else
+    {
+      double b=(2.0*g22*alpha*beta+g12*alpha+g10+g20*beta)/dem;
+      double c=(g22*pow(alpha,2)+g20*alpha+g00)/dem;
+      double rho=pow(b,2)-4.0*c;
+      
+      // dem*E2^2 + b*dem*E2 + c*dem = 0
+      // rho = (b/dem)^2 - 4c/dem = 1/dem^2 * (b^2 - 4*dem*c)
+      //
+      // ==> E2 = -b +/- sqrt(rho)
+      
+      if(rho == 0.0) // maximum one solution 
+      {
+	if( b>=0.0 )
+	{
+	  // std::cout << "E2 < 0" << std::endl;
+	  return 0; // E2 must be > 0 of course
+	}
+	E2_array.push_back( -b/2.0 );
+	solved_E2 = true;
+      }
+      
+      if(rho > pow(b,2)) // only one physical solution (E2 > 0)
+      {
+	E2_array.push_back( (-b+std::sqrt(rho))/2.0 );
+	solved_E2 = true;
+      }
+      
+      if(rho < 0.0) 
+      {
+	// std::cout << "E2 complex: " << rho << std::endl;
+	return 0; // no solutions
+      }
+      
+      if( !solved_E2 )
+      {
+	E2_array.push_back( (-b+std::sqrt(rho))/2.0 );
+	E2_array.push_back( (-b-std::sqrt(rho))/2.0 );   
+	solved_E2 = true;
+      }
+    }
+  }
+  
+  if( !solved_p2y )
+  {
+    if( E2_array.size() > 1 )
+    {
+      for( unsigned isol = 0; isol < E2_array.size(); ++isol )
+      {
+	p2y_array.push_back( alpha+beta*E2_array[isol] );
+      }
+    }
+    else
+    {
+      p2y_array.push_back( alpha+beta*E2_array[0] );
+    }
+  }
+  
+  while( E2_array.size() < p2y_array.size() )
+  {
+    E2_array.push_back( E2_array[0] );
+  }
+  
+  double s = 4.0 * pow(hepstd::beamEnergy,2);
+  // double xxa, xxb;
+
+  for( unsigned isol = 0; isol < p2y_array.size(); ++isol )
+  {
+    E2  = E2_array[isol];
+    p2y = p2y_array[isol];
+    
+    
+    if( std::isnan( E2 ) || std::isnan( p2y ) ) // NaN check ...
+      continue;
+    
+    // std::cout << "E2, p2y = " << E2 << ", " << p2y << std::endl;
+    
+    E1  = E1_ti  + E1_E2*E2  + E1_p2y*p2y;
+    p1z = p1z_ti + p1z_E2*E2 + p1z_p2y*p2y;
+    p2z = p2z_ti + p2z_E2*E2 + p2z_p2y*p2y;
+    
+    // check energy and momentum conservation for trial solutions ... 
+    
+    if( fabs(pa.E()+pb.E()-e_out-E1-E2)      > RESOL ||
+	fabs(pa.Pz()+pb.Pz()-pz_out-p1z-p2z) > RESOL )
+    {
+      // std::cout << "E,pZ not conserved" << std::endl;
+      continue;
+    }
+    
+    E1=E1_ti + E1_E2*E2 + E1_p2y*p2y;
+    if( E1 < 0.0 )
+    {
+      // std::cout << "E1 < 0" << std::endl;
+      continue;
+    }
+    p1x=p1x_ti + p1x_E2*E2 + p1x_p2y*p2y;
+    p1y=p1y_ti + p1y_E2*E2 + p1y_p2y*p2y;
+    p1z=p1z_ti + p1z_E2*E2 + p1z_p2y*p2y;
+    
+    if( fabs(pow(E1,2) - pow(hepstd::norm( p1x, p1y, p1z ),2) - m1_sqr) > RESOL )
+    {
+      // std::cout << "m1 != 0 (" << fabs(pow(E1,2) - pow(hepstd::norm( p1x, p1y, p1z ),2)) << ")" << std::endl;
+      continue;
+    }
+    
+    p2x=p2x_ti + p2x_E2*E2 + p2x_p2y*p2y;
+    p2z=p2z_ti + p2z_E2*E2 + p2z_p2y*p2y;
+    
+    if( fabs(pow(E2,2) - pow(hepstd::norm( p2x, p2y, p2z ),2) - m2_sqr) > RESOL )
+    {
+      // std::cout << "m2 != 0 (" << fabs(pow(E2,2) - pow(hepstd::norm( p2x, p2y, p2z ),2)) << ")" << std::endl;
+      continue;
+    }
+    
+    double invjac=16.0*(E4*(p1z*p2y*p3x - p1y*p2z*p3x - p1z*p2x*p3y + 
+    			    p1x*p2z*p3y + p1y*p2x*p3z - p1x*p2y*p3z) + 
+    			E2*p1z*p3y*p4x - E1*p2z*p3y*p4x - E2*p1y*p3z*p4x + 
+    			E1*p2y*p3z*p4x - E2*p1z*p3x*p4y + E1*p2z*p3x*p4y + 
+    			E2*p1x*p3z*p4y - E1*p2x*p3z*p4y + 
+    			(E2*p1y*p3x - E1*p2y*p3x - E2*p1x*p3y + E1*p2x*p3y)*p4z + 
+    			E3*(-(p1z*p2y*p4x) + p1y*p2z*p4x + p1z*p2x*p4y - 
+    			    p1x*p2z*p4y - p1y*p2x*p4z + p1x*p2y*p4z));
+
+    if( fabs(invjac) < (TINY / 1.0e3) ) 
+    {
+      // std::cout << "1/J ~ 0" << std::endl;
+      continue;
+    }
+    
+    // create parton container ...
+    
+    TKIN temp = inputs;
+    temp.lp = lp;
+    temp.lm = lm;
+    temp.pa = pa; 
+    temp.pb = pb;
+
+    temp.nur.SetPxPyPzE( p1x, p1y, p1z, E1 );
+    temp.nul.SetPxPyPzE( p2x, p2y, p2z, E2 );
+
+    temp.weight = 1.0/fabs(invjac) * temp.phaseSpace() / (2 * xa * xb * s) * 1.0 / s;
+
+    if( (temp.lp + temp.lm + temp.nur + temp.nul + isr).Pt() > TINY )
+    {
+      // std::cout << "Warning: transverse momentum balance failed" << std::endl;
+      continue;
+    }
+    
+    sol.push_back( temp );
+  }
+  
+  return sol.size();
+}

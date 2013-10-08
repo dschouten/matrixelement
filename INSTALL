@@ -1,0 +1,27 @@
+
+System Requirements
+-------------------
+
+The requirements to build the code are as follows:
+
+	-A C, C++, and Fortran compiler (which are compatible with each other)
+	-Boost (A super-awesome, widely-used C++ framework)
+	-ROOT (Any reasonably recent version)
+	-GSL (The GNU Scientific Library)
+
+If you have these components on your system in reasonable places, you're good to go!  If you're on lxplus and can't be bothered to find the location of these packages, that's not a problem, there's a script for that.  Just change to the source directory and do
+
+$ source build-env.sh
+
+Then just run 'make'
+
+
+Running the Code Using the Python Driver Program (RECOMMENDED)
+--------------------------------------------------------------
+
+The python driver program (calculateME.py) is copied to the build directory and can be run from there.  To run it, you must specify the input file, output file, and matrix element configuration file.  As an example, you might run
+
+$ python calculateME.py -i WW_Nominal_MVA_0j_ME0.root -c ../exec/share/configs/cfg_WW.py -o WW.root
+
+The exec/share/configs directory contains matrix element configurations for the various matrix element implementations.
+

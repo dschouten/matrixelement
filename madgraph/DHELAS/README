@@ -1,0 +1,4 @@
+This is where DHELAS code is collected from the individual <me>/Source/DHELAS folders, where 
+<me> = hww,ww,... The code is compiled into dynamic .so library (if "dynamic" environment variable
+defined) or static .a library, into ../lib
+

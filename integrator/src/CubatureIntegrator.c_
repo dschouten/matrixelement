@@ -1,0 +1,42 @@
+#include "integrator/CubatureIntegrator.hh"
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+CubatureIntegrator::CubatureIntegrator( ) :
+  Integrator( "Cubature integrator" )
+{
+
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+void CubatureIntegrator::doIntegral( double returnVal[], double error[], int* fail,
+				     int* neval, double prob[] ) const
+{
+  double* xmin = new double[getNDimensions()];
+  double* xmax = new double[getNDimensions()];
+  for( unsigned id = 0; id < static_cast<unsigned>(getNDimensions()); ++id )
+  {
+    xmin[id] = 0;
+    xmax[id] = 1;
+  }
+
+  (*fail) = cubature::adapt_integrate( getNComp(), CubatureIntegrator::evaluateIntegrand, 
+				       const_cast<void*>( dynamic_cast<const void*>( this ) ),
+				       getNDimensions(), xmin, xmax,
+				       static_cast<unsigned>( getMaxEval() ), getEpsilonAbs(), getEpsilonRel(),
+				       returnVal, error );
+  delete[] xmin;
+  delete[] xmax;
+}
+
+// ------------------------- ======= ------------------------- ======= -------------------------
+
+void CubatureIntegrator::evaluateIntegrand( unsigned ndim, const double* x, void* ptr,
+					    unsigned fdim, double* fval )
+{
+  CubatureIntegrator* caller = static_cast<CubatureIntegrator*>( ptr );
+  int ndim_i = static_cast<int>( ndim );
+  int fdim_i = static_cast<int>( fdim );
+  caller->getIntegrand()( &ndim_i, x, &fdim_i, fval, NULL );
+}

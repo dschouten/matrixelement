@@ -1,0 +1,166 @@
+//
+// author Doug Schouten <doug dot schouten at triumf dot ca>
+//
+
+#include "matrix/Constants.hh"
+
+#define ZLL   0
+#define ZQQ   1
+#define ZTT   2
+#define ZNUNU 3
+#define WLNU  4
+#define WQQ   5
+#define WTNU  6
+
+// F90 module name mangling is different in GCC >= 4.2 apparently ??
+
+#ifdef __GNUC__
+#  include <features.h>
+#  if __GNUC_PREREQ(4,2)
+#    define F90(modname,symbol)  __##modname##_MOD_##symbol
+#  else
+#    define F90(modname,symbol)  __##modname##__##symbol
+#  endif
+#else
+#endif
+
+extern "C"  void F90(modhiggs,evalamp_gg_h_vv) (double[][4], int[4], double*);
+
+extern "C"  void F90(modgraviton,evalamp_gg_g_vv) (double[][4], int[4], double*);
+extern "C"  void F90(modgraviton,evalamp_qqb_g_vv) (double[][4], int[4], double*);
+
+extern "C" int F90(modparameters,decaymode1);
+extern "C" int F90(modparameters,decaymode2); // select V boson decay mode
+
+extern "C" bool F90(modparameters,offshellreson); // do offshell resonance
+extern "C" bool F90(modparameters,offshellv1);
+extern "C" bool F90(modparameters,offshellv2); // do offshell V's
+
+// extern "C" double F90(modparameters,m_z); 
+// extern "C" double F90(modparameters,m_w);
+// extern "C" double F90(modparameters,ga_z);
+// extern "C" double F90(modparameters,ga_w); // W/Z width and mass
+
+extern "C" double F90(modparameters,m_v);
+extern "C" double F90(modparameters,ga_v); // store vector boson mass and width
+
+extern "C" double F90(modparameters,m_reso);  // resonance mass
+extern "C" double F90(modparameters,ga_reso); // resonance width
+
+extern "C" int F90(modparameters,selectedhelcomb); // selected helicity permutation
+
+namespace {
+
+  int dummy_array[4] = { 0 };
+
+  double q[6][4] = { { 0 } };
+
+  const float JHU_GEV = 0.01; // < JHU uses units of 100 GeV ... 
+
+  void convert_units( double p[][4], double s=JHU_GEV ) 
+  {
+    for( unsigned int i = 0; i < 6; ++i )
+    {
+      for( unsigned int j = 0; j < 4; ++j )
+      {
+	p[i][j] *= s; 
+      }
+    }
+  }
+
+  void swap_array( const double in[][4], double out[][4], const int order[] )
+  {
+    for( unsigned i = 0; i < 6; ++i )
+    {
+      for( unsigned j = 0; j < 4; ++j )
+      {
+	out[i][j] = in[order[i]][j];
+      }
+    }
+  }
+
+  /*
+   * NOTE: for ordering of particles in input momentum arrays, also see for eg., JHU 
+   *       LHE output files for X->WW ... all have this order: v,l+,l-,v~
+   */
+
+  void* sgghww_jhu_( double p[][4], double* ans, int* reset )
+  {
+    // JHU : g(p1) + g(p2) + e-(p3) + e+(p4) + mu-(p5) + mu+(p6) ; see EvalAmp_gg_H_VV() in fsrc/mod_Higgs.f90 
+    // MG  : g(p1) + g(p2) + l+(p3) +  v(p4) +  l-(p5) +  v~(p6) ; see getArray() in src/HWW.cc and src/HWW1j.cc
+
+    static const int order[] = { 0, 1, 3, 2, 4, 5 };
+
+    swap_array( p, q, order );
+    convert_units( q, JHU_GEV );
+
+    F90(modhiggs,evalamp_gg_h_vv) ( q, dummy_array, ans );
+
+    return 0x0;
+  }
+
+  void* sggyww_jhu_( double p[][4], double* ans, int* reset )
+  { 
+    // JHU : g(p1) + g(p2) + e-(p3) + e+(p4) + mu-(p5) + mu+(p6) ; see EvalAmp_gg_G_VV() in fsrc/mod_Graviton.f90 
+    // MG  : g(p1) + g(p2) + l+(p3) +  v(p4) +  l-(p5) +  v~(p6) ; see getArray() in src/HWW.cc and src/HWW1j.cc
+
+    static const int order[] = { 0, 1, 3, 2, 4, 5 };
+
+    swap_array( p, q, order );
+    convert_units( q, JHU_GEV );
+    
+    F90(modgraviton,evalamp_gg_g_vv) ( q, dummy_array, ans );
+
+    return 0x0;
+  }
+
+  void* sqqyww_jhu_( double p[][4], double* ans, int* reset )
+  {
+    // JHU : bq(p1) + q(p2) + e-(p3) + e+(p4) + mu-(p5) + mu+(p6) ; see EvalAmp_qqb_G_VV() in fsrc/mod_Graviton.f90 
+    // MG  :  g(p1) + g(p2) + l+(p3) +  v(p4) +  l-(p5) +  v~(p6) ; see getArray() in src/HWW.cc and src/HWW1j.cc
+
+    static const int order[] = { 0, 1, 3, 2, 4, 5 };
+
+    swap_array( p, q, order );
+    convert_units( q, JHU_GEV );
+    
+    F90(modgraviton,evalamp_qqb_g_vv) ( q, dummy_array, ans );
+
+    return 0x0;
+  }
+
+  void initParametersJHU( double mH, double wH, bool offshell = false, bool force = true, int ihel = -1 )
+  {
+    static bool init = false;
+    if( !init || force )
+    {
+      if( ihel >= 1 ) // implement helicity selection
+      {
+	F90(modparameters,selectedhelcomb) = ihel;
+      }
+
+      // @TODO implement CP choice via couplings
+
+      F90(modparameters,decaymode1) = WLNU;
+      F90(modparameters,decaymode2) = WLNU; // W->l,nu decay modes
+      F90(modparameters,offshellreson) = offshell;
+      F90(modparameters,offshellv1) = true;
+      F90(modparameters,offshellv2) = true;
+      
+      // F90(modparameters,m_z) = hepstd::zMass * JHU_GEV;
+      // F90(modparameters,m_w) = hepstd::wMass * JHU_GEV;
+      F90(modparameters,m_reso) = mH * JHU_GEV;
+      
+      // F90(modparameters,ga_z) = hepstd::zWidth * JHU_GEV;
+      // F90(modparameters,ga_w) = hepstd::wWidth * JHU_GEV;
+      F90(modparameters,ga_reso) = wH * JHU_GEV;
+      
+      F90(modparameters,m_v) = hepstd::wMass * JHU_GEV;
+      F90(modparameters,ga_v) = hepstd::wWidth * JHU_GEV; 
+
+      init = true;
+    }
+  }
+  
+}
+

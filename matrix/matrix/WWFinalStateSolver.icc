@@ -1,0 +1,213 @@
+
+
+#ifndef UTILITY_HH
+#define UTILITY_HH
+
+namespace hepstd
+{
+  double norm( double, double );
+  double norm( double, double, double );
+  double norm( double, double, double, double );
+}
+
+#endif
+
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+
+#include "matrix/qwqwqhgy.icc"
+
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+
+#include "matrix/qwqwxaxb.icc"
+
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+// -------------============-------------============-------------============-------------============
+
+/** ============ not used ============
+
+template<typename TKIN>
+int qwqwpzpz( const TKIN& inputs, double  qX, double  qY,
+	      double qwp_sqr, double qwm_sqr, double nuZ, double nbZ,
+	      std::vector<TKIN>& sol, TLorentzVector br )
+{
+  using namespace std;
+  
+  const double MAX_IMAG = 1.0; ///< the maximum imaginary part of roots for \nu equation
+  
+  double epX = inputs.lp.Px() ;
+  double epY = inputs.lp.Py() ;
+  double epZ = inputs.lp.Pz() ;
+  double epE = inputs.lp.E() ;
+  
+  double emX = inputs.lm.Px() ;
+  double emY = inputs.lm.Py() ;
+  double emZ = inputs.lm.Pz() ;
+  double emE = inputs.lm.E() ;
+  
+  double A = qwp_sqr+2*epZ*nuZ;
+  
+  double p1 =   epX*epX-epE*epE;
+  double p2 = 2*epX*epY;
+  double p3 =   epY*epY-epE*epE;
+  double p4 = epX*A;
+  double p5 = epY*A;
+  double p6 = A*A/4-epE*epE*nuZ*nuZ;
+  
+  double Qx = qX-epX-emX;
+  double Qy = qY-epY-emY;
+  
+  double D = qwm_sqr/2+(emX*Qx+emY*Qy+emZ*nbZ);
+  
+  double q1 =   emX*emX-emE*emE;
+  double q2 = 2*emX*emY;
+  double q3 =   emY*emY-emE*emE;
+  double q4 = -2*emX*D + 2*Qx*emE*emE;
+  double q5 = -2*emY*D + 2*Qy*emE*emE;
+  double q6 = D*D -emE*emE*(Qx*Qx+Qy*Qy+nbZ*nbZ) ;
+  
+  double M =  q3*p1-p3*q1;
+  double N =  q3*p4-p3*q4;
+  double O =  q3*p6-p3*q6;
+  double P = -q3*p2+p3*q2;
+  double Q = -q3*p5+p3*q5;
+  
+  double R =      P*p2+M*p3;
+  double S = P*p5+Q*p2+N*p3;
+  double T = Q*p5     +O*p3;
+  
+  double k[5];
+  k[0] =  	       P*P*p1+M*R;             // k_{4}
+  k[1] =        2*P*Q*p1+P*P*p4+M*S+N*R;       // k_{3}
+  k[2] = Q*Q*p1+2*P*Q*p4+P*P*p6+M*T+N*S+O*R;   // ..
+  k[3] = Q*Q*p4+2*P*Q*p6  	 +N*T+O*S;     // ..
+  k[4] =  Q*Q*p6		     +O*T;     // k_{0}
+  
+  double roots [10] = {0.};
+  double rootsi[10] = {0.};
+  double rootsr[10] = {0.};
+  
+  int info[10] = {0};
+  int nsol = rpoly( k, 4, roots, rootsi, info );
+  if (nsol <= 0)
+  {
+    return -1;
+  }
+  int jj(0);
+  for( int ii=0; ii<nsol; ++ii )
+  {
+    if( fabs(rootsi[ii]) < MAX_IMAG && fabs(roots[ii]) < hepstd::beamEnergy )
+    {
+      rootsr[jj] = roots[ii];
+      jj++;
+    }
+  }
+  nsol = jj;
+  
+  double nuX,nuY,nuE;
+  double nbX,nbY,nbE;
+  double w1X,w1Y,w1Z,w1E,w1M2; 
+  double w2X,w2Y,w2Z,w2E,w2M2; 
+  double qZ, qE;
+  
+  for(int i = 0; i < nsol; i++){
+    TKIN solevent = inputs;
+    
+    nuX=rootsr[i];
+    if(std::isnan( nuX )) // << NaN check ... 
+    {
+      solevent.weight=-1; 
+      continue;
+    }
+    
+    double eval = k[4]
+      +k[3]*nuX
+      +k[2]*nuX*nuX
+      +k[1]*nuX*nuX*nuX
+      +k[0]*nuX*nuX*nuX*nuX;
+    
+    if(fabs(eval/k[4])>1.0) 
+    {
+      solevent.weight=-1;      
+      continue;
+    }
+    
+    nuY=(M*nuX*nuX+N*nuX+O)/(P*nuX+Q);
+    nuE=sqrt(nuX*nuX+nuY*nuY+nuZ*nuZ);
+    
+    nbX=qX-(epX+emX+nuX);
+    nbY=qY-(epY+emY+nuY); 
+    nbE=sqrt(nbX*nbX+nbY*nbY+nbZ*nbZ);
+    
+    w1X = epX+nuX;
+    w1Y = epY+nuY;
+    w1Z = epZ+nuZ;
+    w1E = epE+nuE; 
+    w1M2= w1E*w1E-w1X*w1X-w1Y*w1Y-w1Z*w1Z; 
+    
+    w2X = emX+nbX;
+    w2Y = emY+nbY;
+    w2Z = emZ+nbZ;
+    w2E = emE+nbE;    
+    w2M2= w2E*w2E-w2X*w2X-w2Y*w2Y-w2Z*w2Z;
+    
+    qZ = w1Z+w2Z;
+    qE = w1E+w2E;
+    
+    if(qE > 2*hepstd::beamEnergy) 
+    {
+      solevent.weight=-1;
+      continue;
+    }
+    
+    double qEold= sqrt(qE*qE-qX*qX-qY*qY);
+    double x0 = (qEold+qZ)/2/hepstd::beamEnergy;
+    double x1 = (qEold-qZ)/2/hepstd::beamEnergy;     
+    
+    
+    double scale0=x0/(x0+x1);
+    double scale1=x1/(x0+x1);
+    
+    double x0_new = scale0*qE/hepstd::beamEnergy;
+    double x1_new = scale1*qE/hepstd::beamEnergy;
+    
+    if(x0>1 || x1>1)
+    {
+      solevent.weight=-1;
+      continue;
+    }
+    
+    solevent.pa.SetPxPyPzE(scale0*qX, scale0*qY, x0*hepstd::beamEnergy, scale0*qE);
+    solevent.pb.SetPxPyPzE(scale1*qX, scale1*qY,-x1*hepstd::beamEnergy, scale1*qE);
+    
+    solevent.nul.SetPxPyPzE(nuX, nuY, nuZ, nuE);
+    solevent.lp.SetPxPyPzE(epX, epY, epZ, epE);
+    solevent.lm.SetPxPyPzE(emX, emY, emZ, emE);
+    solevent.nur.SetPxPyPzE(nbX, nbY, nbZ, nbE);
+    
+    // set weight member to jacobian determinant
+    
+    double J3x=2*(epE*nuX/nuE-epX); 
+    double J3y=2*(epE*nuY/nuE-epY); 
+    double J4x=2*(emE*nbX/nbE-emX); 
+    double J4y=2*(emE*nbY/nbE-emY); 
+    
+    if( fabs(J3y*J4x-J3x*J4y) < TINY )
+    {
+      solevent.weight = -1;
+    }
+    else
+    {
+      solevent.weight = 1.0 / fabs(J3y*J4x-J3x*J4y) * solevent.phaseSpace();
+    }
+    
+    sol.push_back( solevent );
+  }
+  return sol.size();
+}
+
+============ not used ============ */
