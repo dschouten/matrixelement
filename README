@@ -1,0 +1,39 @@
+Overview
+--------
+
+This is the primary software package for the ATLAS H->WW Matrix Element analysis.  It contains code for:
+
+	-Integration
+	-Matrix elements
+	-Evaluation of matrix elements on events
+
+The code is built using CMake and has the following requirements:
+
+	-ROOT
+	-Boost
+	-GSL (The GNU Scientific Library)
+
+Please read the INSTALL file for instructions on building and running the code easily on either lxplus or your local system.
+
+
+Code Layout
+-----------
+
+What follows is a rough layout of the code.  Only important directories are outlined.
+
+	cmake/ (Useful scripts and modules for the CMake build system)
+	cuba/ (A N-dimensional (with N > 1 for some reason) integration library)
+	cubature/ (An adaptive integration library) [NOT USED BUT BUILT ANYWAY]
+	exec/ (Useful script for executing the code)
+	integrator/ (A C++ library which provides a common integration inteface, abstracting the lower-level implementation)
+	madgraph/ (The common wavefunction/coupling routines called by the matrix elements)
+		CERNLIB/ (A collection of old CERN routines) [NOT USED BUT BUILT ANYWAY]
+		DHELAS/ (The current version of the madgraph coupling/wave function routines)
+		HELAS/ (The old version of the madgraph coupling/wave function routines) [NOT USED BUT BUILT ANYWAY]
+	matrix/ (The core of the analysis which connects the integration libraries to the matrix elements)
+		fsrc/ (The Fortran source code of the matrix element routines)
+		matrix/ (The interface of the Feynman integral classes)
+		src/ (The implementation of the Feynman integral classes)
+	mtt/ (A ttbar mass reconstruction routine)
+	ttanalysis/
+
